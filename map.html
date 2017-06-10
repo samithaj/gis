@@ -25,15 +25,12 @@
         <div id="map" style="height:250px;"></div>
         <div id="elevation_chart"></div>
         <script>
-
-
-            
             google.load('visualization', '1', {
                 packages: ['columnchart']
             });
 
             function initMap() {
-              var contours=[];
+                var contours = [];
 
 
                 var path = [
@@ -58,14 +55,15 @@
                     ]
                 ];
 
-             
-
 
 
 
                 var map = new google.maps.Map(document.getElementById('map'), {
                     zoom: 8,
-                    center: path[0][0],
+                    center: {
+                            lat: 6.9271,
+                            lng: 79.8612
+                        },
                     mapTypeId: 'terrain'
                 });
 
@@ -73,10 +71,28 @@
                 var elevator = new google.maps.ElevationService;
 
 
-                displayPathElevation(path[0], elevator, map);
+               // displayPathElevation(path[0], elevator, map);
 
-                
-                getContours( elevator, 6.9271, 79.8612, 10, 4, 1) 
+                //getContours(elevator, lat, lng, searchDistance, points, h) 
+                getContours(elevator, 6.928, 79.8614, 5, 6, 10).then(
+                    function(pathElevations) {
+                      console.log("-------------")
+                    console.log(pathElevations)
+                    pathElevations.push(pathElevations[0])
+                     var triangleCoords = pathElevations;
+
+                    // Construct the polygon.
+                    var bermudaTriangle = new google.maps.Polygon({
+                      paths: triangleCoords,
+                      strokeColor: '#FF0000',
+                      strokeOpacity: 0.8,
+                      strokeWeight: 2,
+                      fillColor: '#FF0000',
+                      fillOpacity: 0.35
+                    });
+                    bermudaTriangle.setMap(map); 
+                  }
+                  )
             }
 
             function displayPathElevation(path, elevator, map) {
@@ -125,40 +141,59 @@
                 });
             }
 
-            function getContours( elevator, lat, lng, searchDistance, points, h) {
-
-
-
-                for (var i = 0; i < 360; i=i + (360 / points)) {
-
-                    console.log("----------"+i);
-                    var radiusInKm = searchDistance;
-                    try {
-                      path= destinationPoint(lat, lng,i, radiusInKm);
-                      console.log(path);  
-                    }
-                    catch(err) {
-                      console.log(err.message);
-                        
-                    }
-                    
-                    
-                    print("gggggggggggggggg")
-//                     print(path)
-                    
-
-                    elevator.getElevationAlongPath({
-                        'path':path,
-                        'samples': 256
-                    }, getFurthestLocation);
-                    
-
-                };
-
-
-
+            function getContours(elevator, lat, lng, searchDistance, points, h) {
                 
+                return new Promise(function(resolve, reject) {
+                    var pathElevations = [];
+                    for (var i = 0; i < 360; i = i + (360 / points)) {
 
+                        console.log("----------" + i);
+                        var radiusInKm = searchDistance;
+                        try {
+                            path = destinationPoint(lat, lng, i, radiusInKm);
+                            console.log(path);
+                        } catch (err) {
+                            console.log(err.message);
+
+                        }
+
+
+
+                        
+
+                        elevator.getElevationAlongPath({
+                            'path': path,
+                            'samples': 256
+                        }, function(elevations, status, h) {
+
+                          if (status == google.maps.GeocoderStatus.OK) {
+                            var gg=getFurthestLocation(elevations, 1);
+                            console.log(gg)
+                            pathElevations.push(gg);
+                            resolve(pathElevations);
+                          }else if (status == google.maps.GeocoderStatus.OVER_QUERY_LIMIT) { 
+                            wait = true;
+                            setTimeout("wait = true", 2000);
+                            // alert("OQL: " + status);
+                            } else {
+                              alert("Geocode was not successful for the following reason: " + status);
+                            }
+
+
+                            if (status != google.maps.ElevationStatus.OK) {
+                                reject(status);
+                            }
+
+                            
+                        });
+
+
+                    };
+
+
+
+
+                });
 
             }
 
@@ -166,18 +201,14 @@
             /*Find the height of the furthest location which is going to be in danger in one direction*/
 
 
-            function getFurthestLocation(elevations, status) {
-                var contours=[];
-                if (status !== 'OK') {
-
-                    console.log("-------status not ok point-----")
-                    return;
-                }
+            function getFurthestLocation(elevations, h) {
+                var contours = [];
+              
 
                 i = 0;
                 var location = elevations[0];
 
-                h=1
+                // h=1
                 console.log("-------starting point-----")
                 console.log("elevation- " + location.elevation);
                 console.log("latitude - " + location.location.lat());
@@ -195,11 +226,50 @@
                 console.log("elevation- " + location.elevation);
                 console.log("latitude - " + location.location.lat());
                 console.log("longitude - " + location.location.lng());
-
-               contours.push(location.location)
+                var endpoint = {lat: location.location.lat(), lng: location.location.lng()}
+                return endpoint;
 
             }
+            // function getFurthestLocation(elevations, status) {
+            //     return new Promise(function(resolve) {
+            //         //Without new Promise, this throwing will throw an actual exception
+            //           var contours=[];
+            //     if (status !== 'OK') {
 
+            //         console.log("-------status not ok point-----")
+            //         return;
+            //     }
+
+            //     i = 0;
+            //     var location = elevations[0];
+
+            //     h=1
+            //     console.log("-------starting point-----")
+            //     console.log("elevation- " + location.elevation);
+            //     console.log("latitude - " + location.location.lat());
+            //     console.log("longitude - " + location.location.lng());
+            //     while (elevations[i].elevation < elevations[0].elevation + h) {
+            //         //console.log("data - " + elevations[i].elevation);
+            //         location = elevations[i];
+            //         //           console.log("final point elevation- " + location.elevation);
+            //         //           console.log("final point latitude - " + location.location.lat());
+            //         //           console.log("final point longitude - " + location.location.lng());
+            //         i++;
+            //     }
+            //     console.log("-------ending point-----")
+
+            //     console.log("elevation- " + location.elevation);
+            //     console.log("latitude - " + location.location.lat());
+            //     console.log("longitude - " + location.location.lng());
+
+
+            //     resolve(location.location);
+
+
+
+
+            //     });
+            // }
 
 
 
@@ -211,7 +281,7 @@
                 return this * 180 / Math.PI;
             }
 
-            function destinationPoint(lat1,lon1,brng, dist) {
+            function destinationPoint(lat1, lon1, brng, dist) {
                 dist = dist / 6371;
                 brng = brng.toRad();
 
@@ -227,20 +297,20 @@
                     Math.sin(lat2));
 
                 if (isNaN(lat2) || isNaN(lon2)) return null;
-                tmpPath =[{
-                            lat: lat1.toDeg(),
-                            lng: lon1.toDeg()
-                        }, //first line
-                        {
-                            lat: lat2.toDeg(),
-                            lng: lon2.toDeg()
-                        }
-                    ];
+                tmpPath = [{
+                        lat: lat1.toDeg(),
+                        lng: lon1.toDeg()
+                    }, //first line
+                    {
+                        lat: lat2.toDeg(),
+                        lng: lon2.toDeg()
+                    }
+                ];
 
                 return tmpPath;
             }
         </script>
-        <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDoWFvd8mDmblQl6xOIEK81KOTfki8I3bk&callback=initMap">
+        <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAt3WShYEiGRWngQiLBRaQyT7Ki_od4NZ8&callback=initMap">
         </script>
     </div>
 </body>
